@@ -10,25 +10,39 @@ namespace Roots\Bedrock;
  */
 class Autoloader
 {
-    /** @var static Singleton instance */
+    /**
+     * @var static Singleton instance
+     */
     private static $instance;
 
-    /** @var array Store Autoloader cache and site option */
+    /**
+     * @var array Store Autoloader cache and site option
+     */
     private $cache;
 
-    /** @var array Autoloaded plugins */
+    /**
+     * @var array Autoloaded plugins
+     */
     private $autoPlugins;
 
-    /** @var array Autoloaded mu-plugins */
+    /**
+     * @var array Autoloaded mu-plugins
+     */
     private $muPlugins;
 
-    /** @var int Number of plugins */
+    /**
+     * @var int Number of plugins
+     */
     private $count;
 
-    /** @var array Newly activated plugins */
+    /**
+     * @var array Newly activated plugins
+     */
     private $activated;
 
-    /** @var string Relative path to the mu-plugins dir */
+    /**
+     * @var string Relative path to the mu-plugins dir
+     */
     private $relativePath;
 
     /**
@@ -51,18 +65,20 @@ class Autoloader
         $this->loadPlugins();
     }
 
-   /**
-    * Run some checks then autoload our plugins.
-    */
+    /**
+     * Run some checks then autoload our plugins.
+     */
     public function loadPlugins()
     {
         $this->checkCache();
         $this->validatePlugins();
         $this->countPlugins();
 
-        array_map(static function () {
-            include_once WPMU_PLUGIN_DIR . '/' . func_get_args()[0];
-        }, array_keys($this->cache['plugins']));
+        if (is_array($this->cache) && isset($this->cache['plugins']) && is_array($this->cache['plugins'])) {
+            array_map(static function () {
+                include_once WPMU_PLUGIN_DIR . '/' . func_get_args()[0];
+            }, array_keys($this->cache['plugins']));
+        }
 
         add_action('plugins_loaded', [$this, 'pluginHooks'], -9999);
     }
@@ -102,7 +118,7 @@ class Autoloader
     {
         $cache = get_site_option('bedrock_autoloader');
 
-        if ($cache === false || (isset($cache['plugins'], $cache['count']) && count($cache['plugins']) !== $cache['count'])) {
+        if ($cache === false || !is_array($cache) || (isset($cache['plugins'], $cache['count']) && count($cache['plugins']) !== $cache['count'])) {
             $this->updateCache();
             return;
         }
@@ -120,11 +136,11 @@ class Autoloader
         require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
         $this->autoPlugins = get_plugins($this->relativePath);
-        $this->muPlugins   = get_mu_plugins();
-        $plugins           = array_diff_key($this->autoPlugins, $this->muPlugins);
-        $rebuild           = !isset($this->cache['plugins']);
-        $this->activated   = $rebuild ? $plugins : array_diff_key($plugins, $this->cache['plugins']);
-        $this->cache       = ['plugins' => $plugins, 'count' => $this->countPlugins()];
+        $this->muPlugins = get_mu_plugins();
+        $plugins = array_diff_key($this->autoPlugins, $this->muPlugins);
+        $rebuild = !is_array($this->cache) || !isset($this->cache['plugins']);
+        $this->activated = $rebuild ? $plugins : array_diff_key($plugins, $this->cache['plugins']);
+        $this->cache = ['plugins' => $plugins, 'count' => $this->countPlugins()];
 
         update_site_option('bedrock_autoloader', $this->cache);
     }
@@ -150,6 +166,11 @@ class Autoloader
      */
     private function validatePlugins()
     {
+        if (!is_array($this->cache) || !isset($this->cache['plugins']) || !is_array($this->cache['plugins'])) {
+            $this->updateCache();
+            return;
+        }
+
         foreach ($this->cache['plugins'] as $plugin_file => $plugin_info) {
             if (!file_exists(WPMU_PLUGIN_DIR . '/' . $plugin_file)) {
                 $this->updateCache();
@@ -174,7 +195,7 @@ class Autoloader
 
         $count = count(glob(WPMU_PLUGIN_DIR . '/*/', GLOB_ONLYDIR | GLOB_NOSORT));
 
-        if (!isset($this->cache['count']) || $count !== $this->cache['count']) {
+        if (!is_array($this->cache) || !isset($this->cache['count']) || $count !== $this->cache['count']) {
             $this->count = $count;
             $this->updateCache();
         }
